@@ -1,0 +1,10 @@
+*.sqlite
+*.atx
+*.csv
+.Rhistory
+/ezorim_statistiim_2022.gdb/
+*.gpkg
+/parcel_all/
+/sheet_k/
+/sub_gush_all/
+/app/rsconnect/
