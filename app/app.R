@@ -11,35 +11,27 @@ electionslist <- unique(bechirot_long_places$elections) %>% sort(decreasing = TR
 
 ui <- fluidPage(
     titlePanel("Knesset (Israeli parliament) Election results / תוצאות הבחירות לכנסת"),
+    leafletOutput("bechirotmap", height = "66vh"),
+    hr(),
     fluidRow(
-        column(
-            12,
-            tags$div(
-                     id="subtitle",
-                     'Please wait a few seconds for the data to load / נא המתן כמה שניות לטעינת הנתונים'
-                 )
-        )
-    ),
-    sidebarLayout(
-        sidebarPanel(
-            selectInput(
-                "election",
-                "Knesset / כנסת",
-                electionslist,
-                "25"
-            ),
-            selectInput(
-                "party",
-                "Party / מפלגת",
-                c("didntvote"),
-                "didntvote"
-            ),
-            width = 2
-        ),
-        mainPanel(
-            leafletOutput("bechirotmap", height = "80vh"),
-            width = 10
-        )
+        column(6,
+               selectInput(
+                   "election",
+                   "Knesset / כנסת",
+                   electionslist,
+                   "25",
+                   selectize=FALSE
+               )
+               ),
+        column(6,
+               selectInput(
+                   "party",
+                   "Party / מפלגה",
+                   c("didntvote"),
+                   "didntvote",
+                   selectize=FALSE
+               )
+               )
     ),
     fluidRow(
         column(12, tags$div(id="cite",
@@ -62,12 +54,12 @@ server <- function(input, output) {
     output$bechirotmap <- renderLeaflet({
         current_data <- bechirot_long_places %>% filter(name == input$party) %>% filter(elections == input$election)
         current_city <- input$map_shape_click$properties
-        vote_perc <- colorNumeric("Blues", current_data$logpercent)
+        vote_colours <- colorNumeric("Blues", current_data$logpercent)
         leaflet(data = current_data) %>%
             setView(34.8788452148438, 32.1384086967725, 8) %>%
             addTiles() %>%
             addPolygons(
-                fillColor = ~vote_perc(logpercent),
+                fillColor = ~vote_colours(logpercent),
                 weight = 1,
                 opacity = 0.9,
                 fillOpacity = 0.9,
@@ -81,7 +73,7 @@ server <- function(input, output) {
             ) %>%
             addLegend(
                 title = "%",
-                pal = vote_perc,
+                pal = vote_colours,
                 values = ~logpercent,
                 opacity = 1,
                 labFormat = labelFormat(
