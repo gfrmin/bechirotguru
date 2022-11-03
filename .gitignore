@@ -1,4 +1,3 @@
-*.sqlite
 *.atx
 *.csv
 .Rhistory
