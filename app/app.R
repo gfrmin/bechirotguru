@@ -11,7 +11,6 @@ electionslist <- unique(bechirot_long_places$elections) %>% sort(decreasing = TR
 
 ui <- fluidPage(
     titlePanel("Knesset (Israeli parliament) Election results / תוצאות הבחירות לכנסת"),
-    leafletOutput("bechirotmap", height = "66vh"),
     hr(),
     fluidRow(
         column(6,
@@ -33,6 +32,7 @@ ui <- fluidPage(
                )
                )
     ),
+    leafletOutput("bechirotmap", height = "66vh"),
     fluidRow(
         column(12, tags$div(id="cite",
         'Created by ', tags$a('Guy Freeman', href='https://www.linkedin.com/in/guyfreemanstat'), ' from ', tags$a('public data', href='https://publicdatamarket.com/israeldata/bechirot'))
