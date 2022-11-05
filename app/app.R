@@ -3,19 +3,8 @@ library(tidyverse)
 library(leaflet)
 library(sf)
 library(ggplot2)
+library(plotly)
 
-bechirot_wide_places <- st_read("bechirot_wide_places.sqlite")
-
-bechirot_long_places <- bechirot_wide_places %>% pivot_longer(-c(semel_yishuv, shem_yishuv, shem_yishuv_english, GEOMETRY)) %>% filter(!is.na(value)) %>% separate(name, into = c("name", "elections"), sep = "_") %>% mutate(percent = 100*value) %>% mutate(logpercent = log(1 + percent)) %>% arrange(desc(value))
-
-bechirot_winners <- bechirot_long_places %>% group_by(semel_yishuv, elections) %>% filter(value == max(value)) %>% ungroup
-winning_parties <- unique(bechirot_winners$name)
-winning_parties_number <- length(winning_parties)
-winnerpal <- colorFactor(hcl.colors(winning_parties_number, palette = "YlGnBu"), winning_parties)
-
-electionslist <- unique(bechirot_winners$elections) %>% sort(decreasing = TRUE)
-
-placeslist <- bechirot_wide_places %>% select(semel_yishuv, shem_yishuv, shem_yishuv_english) %>% unique
 
 ui <- fluidPage(
     titlePanel("Knesset (Israeli parliament) Election results / תוצאות הבחירות לכנסת"),
@@ -49,8 +38,8 @@ ui <- fluidPage(
                ),
         ),
     tabsetPanel(type = "tabs",
-                tabPanel("Map", leafletOutput("bechirotmap", height = "72vh")),
-                tabPanel("Place", plotOutput("placegraph"))
+                tabPanel("Map", leafletOutput("bechirotmap", height = "66vh")),
+                tabPanel("Place", plotlyOutput("placegraph"))
                 ),
     fluidRow(
         column(12, tags$div(id="cite",
@@ -60,6 +49,12 @@ ui <- fluidPage(
 )
 
 server <- function(input, output) {
+    bechirot_wide_places <- st_read("bechirot_wide_places.sqlite")
+    bechirot_long_places <- bechirot_wide_places %>% pivot_longer(-c(semel_yishuv, shem_yishuv, shem_yishuv_english, GEOMETRY)) %>% filter(!is.na(value)) %>% separate(name, into = c("name", "elections"), sep = "_") %>% mutate(percent = 100*value) %>% mutate(logpercent = log(1 + percent)) %>% arrange(desc(value))
+
+    electionslist <- unique(bechirot_long_places$elections) %>% sort(decreasing = TRUE)
+    placeslist <- bechirot_wide_places %>% select(semel_yishuv, shem_yishuv, shem_yishuv_english) %>% unique
+
     observe({
         election <- input$election
         current_data <- bechirot_long_places %>% filter(elections == input$election)
@@ -70,17 +65,17 @@ server <- function(input, output) {
         )
     })
 
-    output$placegraph <- renderPlot({
+    output$placegraph <- renderPlotly({
         place_votes <- bechirot_long_places
         if (input$place != "כל הישובים" & input$party == "ALL") {
             place_votes <- place_votes %>% filter(!name %in% c("cancelled", "didntvote")) %>% filter(shem_yishuv == input$place)
-            main_parties <- place_votes %>% filter(percent >= 5) %>% pull(name) %>% unique
+            main_parties <- place_votes %>% filter(elections >= 24) %>% filter(percent >= 3) %>% pull(name) %>% unique
             place_votes <- place_votes %>% filter(name %in% main_parties)
         } else if (input$place != "כל הישובים" & input$party != "ALL") {
             place_votes <- place_votes %>% filter(shem_yishuv == input$place) %>% filter(name == input$party)
         }
         if (input$place != "כל הישובים") {
-            ggplot(place_votes) + geom_line(aes(elections, percent, colour = name, group = name), size = 3) + xlab("Election") + ylab("%") + labs(colour = "Party") + theme_bw(base_size = 36)
+            ggplotly(ggplot(place_votes) + geom_line(aes(elections, percent, colour = name, group = name, text = paste0(name, ": ", round(percent, 1))), size = 1) + xlab("Election") + ylab("%") + labs(colour = "Party") + theme_bw(base_size = 18), tooltip = "text")
         }
     })
 
@@ -136,13 +131,18 @@ server <- function(input, output) {
         party_chosen <- input$party
         leafletProxy("bechirotmap") %>% clearShapes() %>% clearControls()
         if (party_chosen == "ALL") {
-            current_data <- bechirot_winners %>% filter(elections == input$election)
-            leafletProxy("bechirotmap", data = current_data) %>%
+            bechirot_winners <- bechirot_long_places %>% group_by(semel_yishuv, elections) %>% filter(value == max(value)) %>% ungroup
+            current_winners <- bechirot_winners %>% filter(elections == input$election)
+            winning_parties <- unique(current_winners$name)
+            winning_parties_number <- length(winning_parties)
+            winnerpal <- colorFactor(hcl.colors(winning_parties_number, palette = "YlGnBu"), winning_parties)
+            leafletProxy("bechirotmap", data = current_winners) %>%
                 addPolygons(
                     fillColor = ~winnerpal(name),
                     weight = 1,
                     opacity = 0.9,
                     fillOpacity = 0.9,
+                    color = "white",
                     layerId = ~semel_yishuv,
                     highlightOptions = highlightOptions(
                         weight = 2,
