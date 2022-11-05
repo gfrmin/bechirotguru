@@ -39,7 +39,8 @@ ui <- fluidPage(
         ),
     tabsetPanel(type = "tabs",
                 tabPanel("Map", leafletOutput("bechirotmap", height = "66vh")),
-                tabPanel("Place", plotlyOutput("placegraph"))
+                tabPanel("Results history / תוצאות לאורך זמן", plotlyOutput("placegraph")),
+                tabPanel("Top votes / התוצאות המובילות", tableOutput("partytable")),
                 ),
     fluidRow(
         column(12, tags$div(id="cite",
@@ -77,6 +78,21 @@ server <- function(input, output) {
         if (input$place != "כל הישובים") {
             ggplotly(ggplot(place_votes) + geom_line(aes(elections, percent, colour = name, group = name, text = paste0(name, ": ", round(percent, 1))), size = 1) + xlab("Election") + ylab("%") + labs(colour = "Party") + theme_bw(base_size = 18), tooltip = "text")
         }
+    })
+
+    output$partytable <- renderTable({
+        party_votes <- bechirot_long_places %>% as_tibble %>% filter(elections == input$election) %>% select(shem_yishuv_english, shem_yishuv, name, percent)
+        if (input$place == "כל הישובים" & input$party == "ALL") {
+            party_votes <- party_votes %>% filter(!name %in% c("cancelled", "didntvote"))
+        }
+        else if (input$place == "כל הישובים" & input$party != "ALL") {
+            party_votes <- party_votes %>% filter(name == input$party)
+        } else if (input$place != "כל הישובים" & input$party == "ALL") {
+            party_votes <- party_votes %>% filter(shem_yishuv == input$place)
+        } else {
+            party_votes <- party_votes %>% filter(shem_yishuv == input$place) %>% filter(name == input$party)
+        }
+        party_votes %>% rename(`ישוב` = shem_yishuv, `Place` = shem_yishuv_english, `Party / מפלגה` = name, `%` = percent) %>% head(10) %>% mutate(`%` = round(`%`, 1))
     })
 
     output$bechirotmap <- renderLeaflet({
