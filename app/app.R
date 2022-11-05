@@ -47,8 +47,11 @@ ui <- fluidPage(
                    "כל הישובים"
                )
                ),
-    ),
-    leafletOutput("bechirotmap", height = "72vh"),
+        ),
+    tabsetPanel(type = "tabs",
+                tabPanel("Map", leafletOutput("bechirotmap", height = "72vh")),
+                tabPanel("Place", plotOutput("placegraph"))
+                ),
     fluidRow(
         column(12, tags$div(id="cite",
         'Created by ', tags$a('Guy Freeman', href='https://www.linkedin.com/in/guyfreemanstat'), ' from ', tags$a('public data', href='https://publicdatamarket.com/israeldata/bechirot'))
@@ -65,6 +68,20 @@ server <- function(input, output) {
             choices = c("ALL", unique(current_data$name) %>% sort()),
             selected = "ALL"
         )
+    })
+
+    output$placegraph <- renderPlot({
+        place_votes <- bechirot_long_places
+        if (input$place != "כל הישובים" & input$party == "ALL") {
+            place_votes <- place_votes %>% filter(!name %in% c("cancelled", "didntvote")) %>% filter(shem_yishuv == input$place)
+            main_parties <- place_votes %>% filter(percent >= 5) %>% pull(name) %>% unique
+            place_votes <- place_votes %>% filter(name %in% main_parties)
+        } else if (input$place != "כל הישובים" & input$party != "ALL") {
+            place_votes <- place_votes %>% filter(shem_yishuv == input$place) %>% filter(name == input$party)
+        }
+        if (input$place != "כל הישובים") {
+            ggplot(place_votes) + geom_line(aes(elections, percent, colour = name, group = name), size = 3) + xlab("Election") + ylab("%") + labs(colour = "Party") + theme_bw(base_size = 36)
+        }
     })
 
     output$bechirotmap <- renderLeaflet({
