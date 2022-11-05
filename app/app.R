@@ -2,18 +2,26 @@ library(shiny)
 library(tidyverse)
 library(leaflet)
 library(sf)
+library(ggplot2)
 
 bechirot_wide_places <- st_read("bechirot_wide_places.sqlite")
 
-bechirot_long_places <- bechirot_wide_places %>% pivot_longer(-c(semel_yishuv, shem_yishuv, shem_yishuv_english, GEOMETRY)) %>% filter(!is.na(value)) %>% separate(name, into = c("name", "elections"), sep = "_") %>% mutate(percent = 100*value) %>% mutate(logpercent = log(1 + percent))
+bechirot_long_places <- bechirot_wide_places %>% pivot_longer(-c(semel_yishuv, shem_yishuv, shem_yishuv_english, GEOMETRY)) %>% filter(!is.na(value)) %>% separate(name, into = c("name", "elections"), sep = "_") %>% mutate(percent = 100*value) %>% mutate(logpercent = log(1 + percent)) %>% arrange(desc(value))
 
-electionslist <- unique(bechirot_long_places$elections) %>% sort(decreasing = TRUE)
+bechirot_winners <- bechirot_long_places %>% group_by(semel_yishuv, elections) %>% filter(value == max(value)) %>% ungroup
+winning_parties <- unique(bechirot_winners$name)
+winning_parties_number <- length(winning_parties)
+winnerpal <- colorFactor(hcl.colors(winning_parties_number, palette = "YlGnBu"), winning_parties)
+
+electionslist <- unique(bechirot_winners$elections) %>% sort(decreasing = TRUE)
+
+placeslist <- bechirot_wide_places %>% select(semel_yishuv, shem_yishuv, shem_yishuv_english) %>% unique
 
 ui <- fluidPage(
     titlePanel("Knesset (Israeli parliament) Election results / תוצאות הבחירות לכנסת"),
     hr(),
     fluidRow(
-        column(6,
+        column(4,
                selectInput(
                    "election",
                    "Knesset / כנסת",
@@ -22,17 +30,25 @@ ui <- fluidPage(
                    selectize=FALSE
                )
                ),
-        column(6,
+        column(4,
                selectInput(
                    "party",
                    "Party / מפלגה",
-                   c("didntvote"),
-                   "didntvote",
+                   "ALL",
+                   "ALL",
                    selectize=FALSE
                )
+               ),
+        column(4,
+               selectizeInput(
+                   "place",
+                   "Place / ישוב",
+                   "כל הישובים",
+                   "כל הישובים"
                )
+               ),
     ),
-    leafletOutput("bechirotmap", height = "66vh"),
+    leafletOutput("bechirotmap", height = "72vh"),
     fluidRow(
         column(12, tags$div(id="cite",
         'Created by ', tags$a('Guy Freeman', href='https://www.linkedin.com/in/guyfreemanstat'), ' from ', tags$a('public data', href='https://publicdatamarket.com/israeldata/bechirot'))
@@ -46,46 +62,40 @@ server <- function(input, output) {
         current_data <- bechirot_long_places %>% filter(elections == input$election)
         updateSelectInput(
             inputId = "party",
-            choices = unique(current_data$name) %>% sort(),
-            selected = "didntvote"
+            choices = c("ALL", unique(current_data$name) %>% sort()),
+            selected = "ALL"
         )
     })
 
     output$bechirotmap <- renderLeaflet({
-        current_data <- bechirot_long_places %>% filter(name == input$party) %>% filter(elections == input$election)
-        current_city <- input$map_shape_click$properties
-        vote_colours <- colorNumeric("Blues", current_data$logpercent)
-        leaflet(data = current_data) %>%
+        leaflet() %>%
             setView(34.8788452148438, 32.1384086967725, 8) %>%
-            addTiles() %>%
-            addPolygons(
-                fillColor = ~vote_colours(logpercent),
-                weight = 1,
-                opacity = 0.9,
-                fillOpacity = 0.9,
-                layerId = ~semel_yishuv,
-                highlightOptions = highlightOptions(
-                    weight = 2,
-                    color = "#000",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE
-                )
-            ) %>%
-            addLegend(
-                title = "%",
-                pal = vote_colours,
-                values = ~logpercent,
-                opacity = 1,
-                labFormat = labelFormat(
-                    digits = 0,
-                    transform = function(x) exp(x - 1)
-                )
+            addTiles()
+    })
+
+    observe({
+        event <- input$bechirotmap_shape_click
+        if (is.null(event)) {
+            updateSelectizeInput(
+                inputId = "place",
+                selected = "כל הישובים",
+                choices = c("כל הישובים", placeslist %>% pull(shem_yishuv) %>% sort),
+                server = TRUE,
+                options = list(maxOptions = 2000)
             )
+        } else {
+            updateSelectizeInput(
+                inputId = "place",
+                selected = placeslist %>% filter(semel_yishuv == event$id) %>% pull(shem_yishuv),
+                choices = c("כל הישובים", placeslist %>% pull(shem_yishuv) %>% sort),
+                server = TRUE
+            )
+        }
     })
 
     show_city_popup <- function(semel, lat, lng) {
         current_data <- bechirot_long_places %>% filter(elections == input$election) %>% filter(semel_yishuv == semel) %>% as_tibble
-        current_votes <- current_data %>% select(party = name, percent) %>% mutate(percentround = round(percent, 1)) %>% filter(percentround > 0) %>% arrange(desc(percent)) %>% transmute(partytext = str_c(party, ": ", percentround, "%")) %>% unlist %>% paste(collapse = "<br/>")
+        current_votes <- current_data %>% select(party = name, percent) %>% mutate(percentround = round(percent, 1)) %>% filter(percentround > 0) %>% transmute(partytext = str_c(party, ": ", percentround, "%")) %>% unlist %>% paste(collapse = "<br/>")
         place_hebrew <- current_data %>% pull(shem_yishuv) %>% unique
         place_english <- current_data %>% pull(shem_yishuv_english) %>% unique
         content <- str_glue("<strong>{place_english} {place_hebrew}</strong><br/>{current_votes}")
@@ -93,15 +103,72 @@ server <- function(input, output) {
     }
 
     observe({
+        shem_yishuv_chosen <- input$place
         leafletProxy("bechirotmap") %>% clearPopups()
-        event <- input$bechirotmap_shape_click
-        if (is.null(event))
-            return()
-        isolate({
-            show_city_popup(event$id, event$lat, event$lng)
-        })
+        placechosen <- placeslist %>% filter(shem_yishuv == shem_yishuv_chosen)
+        if (nrow(placechosen) > 0) {
+            isolate({
+                placechosen_semel <- placechosen %>% pull(semel_yishuv)
+                placecentre <- placechosen %>% st_geometry %>% st_centroid %>% st_coordinates
+                show_city_popup(placechosen_semel, placecentre[2], placecentre[1])
+            })
+        }
     })
 
+    observe({
+        party_chosen <- input$party
+        leafletProxy("bechirotmap") %>% clearShapes() %>% clearControls()
+        if (party_chosen == "ALL") {
+            current_data <- bechirot_winners %>% filter(elections == input$election)
+            leafletProxy("bechirotmap", data = current_data) %>%
+                addPolygons(
+                    fillColor = ~winnerpal(name),
+                    weight = 1,
+                    opacity = 0.9,
+                    fillOpacity = 0.9,
+                    layerId = ~semel_yishuv,
+                    highlightOptions = highlightOptions(
+                        weight = 2,
+                        color = "#000",
+                        fillOpacity = 0.7,
+                        bringToFront = TRUE
+                    )
+                ) %>%
+                addLegend(
+                    title = "%",
+                    pal = winnerpal,
+                    values = ~name,
+                    opacity = 1,
+                )
+        } else {
+            current_data <- bechirot_long_places %>% filter(name == party_chosen) %>% filter(elections == input$election)
+            vote_colours <- colorNumeric("Blues", current_data$logpercent)
+            leafletProxy("bechirotmap", data = current_data) %>%
+                addPolygons(
+                    fillColor = ~vote_colours(logpercent),
+                    weight = 1,
+                    opacity = 0.9,
+                    fillOpacity = 0.9,
+                    layerId = ~semel_yishuv,
+                    highlightOptions = highlightOptions(
+                        weight = 2,
+                        color = "#000",
+                        fillOpacity = 0.7,
+                        bringToFront = TRUE
+                    )
+                ) %>%
+                addLegend(
+                    title = "%",
+                    pal = vote_colours,
+                    values = ~logpercent,
+                    opacity = 1,
+                    labFormat = labelFormat(
+                        digits = 0,
+                        transform = function(x) exp(x - 1)
+                    )
+                )
+        }
+    })
 }
 
 shinyApp(ui, server)
