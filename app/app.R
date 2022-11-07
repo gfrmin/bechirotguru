@@ -14,7 +14,7 @@ ui <- fluidPage(
                selectInput(
                    "election",
                    "Knesset / כנסת",
-                   electionslist,
+                   25:15,
                    "25",
                    selectize=FALSE
                )
@@ -44,7 +44,7 @@ ui <- fluidPage(
                 ),
     fluidRow(
         column(12, tags$div(id="cite",
-        'Created by ', tags$a('Guy Freeman', href='https://www.linkedin.com/in/guyfreemanstat'), ' from ', tags$a('public data', href='https://publicdatamarket.com/israeldata/bechirot'))
+        'Created by ', tags$a('Guy Freeman', href='https://www.linkedin.com/in/guyfreemanstat'), ' from ', tags$a('public data', href='https://publicdatamarket.com/israeldata/bechirot'), '. ', tags$a('Source', href='https://github.com/gfrmin/bechirotguru'))
       )
     )
 )
