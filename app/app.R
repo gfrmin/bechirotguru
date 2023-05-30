@@ -92,7 +92,7 @@ server <- function(input, output) {
         } else {
             party_votes <- party_votes %>% filter(shem_yishuv == input$place) %>% filter(name == input$party)
         }
-        party_votes %>% rename(`ישוב` = shem_yishuv, `Place` = shem_yishuv_english, `Party / מפלגה` = name, `%` = percent) %>% head(10) %>% mutate(`%` = round(`%`, 1))
+        party_votes %>% rename(`ישוב` = shem_yishuv, `Place` = shem_yishuv_english, `Party / מפלגה` = name, `%` = percent) %>% head(20) %>% mutate(`%` = round(`%`, 1))
     })
 
     output$bechirotmap <- renderLeaflet({
